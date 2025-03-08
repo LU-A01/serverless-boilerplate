@@ -1,0 +1,118 @@
+# =====================================
+# Deno関連
+# =====================================
+.cache/
+.deno/
+.vscode/.ropeproject/
+*.orig
+*.pyc
+*.swp
+.env
+
+# =====================================
+# SvelteKit関連
+# =====================================
+.svelte-kit/
+build/
+node_modules/
+frontend/.svelte-kit/
+frontend/build/
+frontend/node_modules/
+
+# =====================================
+# Docker関連
+# =====================================
+.docker/
+docker-compose.override.yml
+docker-compose.ci.yml
+docker-compose.e2e.yml
+
+# =====================================
+# データベース関連
+# =====================================
+*.sqlite
+*.sqlite3
+*.db
+dump.rdb
+pg-data/
+pgadmin-data/
+
+# =====================================
+# OS関連
+# =====================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# =====================================
+# エディタ・IDE関連
+# =====================================
+# VSCode（ワークスペース設定以外）
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.iws
+.idea_modules/
+
+# =====================================
+# テスト関連
+# =====================================
+/coverage/
+/playwright-report/
+/test-results/
+/tests/e2e/videos/
+/tests/e2e/screenshots/
+
+# =====================================
+# ビルド関連
+# =====================================
+/dist/
+/.cache/
+/bin/
+/tmp/
+
+# =====================================
+# ログ関連
+# =====================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =====================================
+# 環境変数
+# =====================================
+.env
+.env.*
+!.env.example
+
+# =====================================
+# CI/CD関連
+# =====================================
+# GitHub Actionsで自動生成されるファイル
+/.github/.release-notes.md
+
+# =====================================
+# Deno固有のキャッシュディレクトリ
+# =====================================
+backend-deno-cache/
+frontend-deno-cache/ 

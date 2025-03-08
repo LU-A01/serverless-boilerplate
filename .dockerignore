@@ -1,0 +1,33 @@
+# Git関連
+.git
+.gitignore
+
+# Dockerファイル（除外しないように変更）
+# Dockerfile
+# docker/
+# docker-compose.yml
+
+# ログファイル
+*.log
+
+# エディタ設定
+.vscode/
+.idea/
+
+# Node.js
+**/node_modules/
+npm-debug.log
+
+# Denoキャッシュ
+**/.deno/
+
+# キャッシュフォルダ
+**/dist/
+**/build/
+**/_build/
+**/tmp/
+
+# 環境設定
+.env
+.env.*
+!.env.example 

@@ -25,7 +25,8 @@
     "npm:tailwindcss@4": "4.0.11",
     "npm:typescript-eslint@^8.20.0": "8.26.0_eslint@9.21.0_typescript@5.8.2_@typescript-eslint+parser@8.26.0__eslint@9.21.0__typescript@5.8.2",
     "npm:typescript@5": "5.8.2",
-    "npm:vite@6": "6.2.0_lightningcss@1.29.2",
+    "npm:vite@*": "6.2.0",
+    "npm:vite@6": "6.2.0",
     "npm:vitest@3": "3.0.8_jsdom@26.0.0_vite@6.2.0"
   },
   "npm": {

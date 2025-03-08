@@ -1,20 +1,500 @@
-name: Basic CI
+name: 統合CI/CD
 
 on:
   push:
     branches: [main, master]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
   pull_request:
     branches: [main, master]
   workflow_dispatch: # 手動実行
 
 env:
   DENO_VERSION: 2.2.3
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
 
 jobs:
-  format:
+  lint-and-format:
+    name: リントとフォーマット
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v1
+      - name: チェックアウト
+        uses: actions/checkout@v4
+
+      - name: Docker イメージキャッシュ設定
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Docker Buildx セットアップ
+        uses: docker/setup-buildx-action@v3
+
+      - name: バックエンドイメージビルド
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/backend.Dockerfile
+          load: true
+          tags: serverless-backend:ci
+          target: dev
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+      - name: フロントエンドイメージビルド
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/frontend.Dockerfile
+          load: true
+          tags: serverless-frontend:ci
+          target: dev
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+      - name: キャッシュの最適化
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+      - name: バックエンドリント実行
+        run: docker run --rm serverless-backend:ci deno lint --json > backend-lint.json || true
+
+      - name: フロントエンドリント実行
+        run: docker run --rm serverless-frontend:ci deno lint --json > frontend-lint.json || true
+
+      - name: バックエンドフォーマットチェック
+        run: docker run --rm serverless-backend:ci deno fmt --check
+
+      - name: フロントエンドフォーマットチェック
+        run: docker run --rm serverless-frontend:ci deno fmt --check
+
+      - name: リント結果確認
+        id: lint-check
+        run: |
+          lint_errors=false
+
+          if [ -f backend-lint.json ] && [ -s backend-lint.json ]; then
+            echo "::warning::バックエンドのリントエラーが検出されました"
+            echo "リントエラー詳細:"
+            cat backend-lint.json | jq -r '.[] | "::error file=\(.file),line=\(.range.start.line),col=\(.range.start.col)::\(.message)"' || true
+            lint_errors=true
+          else
+            echo "::notice::バックエンドのリントエラーはありません"
+          fi
+
+          if [ -f frontend-lint.json ] && [ -s frontend-lint.json ]; then
+            echo "::warning::フロントエンドのリントエラーが検出されました"
+            echo "リントエラー詳細:"
+            cat frontend-lint.json | jq -r '.[] | "::error file=\(.file),line=\(.range.start.line),col=\(.range.start.col)::\(.message)"' || true
+            lint_errors=true
+          else
+            echo "::notice::フロントエンドのリントエラーはありません"
+          fi
+
+          echo "lintErrors=$lint_errors" >> $GITHUB_OUTPUT
+
+      - name: リント結果アップロード
+        if: steps.lint-check.outputs.lintErrors == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-results
+          path: |
+            backend-lint.json
+            frontend-lint.json
+          retention-days: 7
+
+  unit-tests:
+    name: ユニットテスト
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint-and-format
+    steps:
+      - name: チェックアウト
+        uses: actions/checkout@v4
+
+      - name: Docker Compose セットアップ
+        uses: KengoTODA/actions-setup-docker-compose@main
+        with:
+          version: "2.21.0"
+
+      - name: Docker イメージキャッシュ設定
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: テスト用Docker Compose設定ファイル作成
+        run: |
+          cat > docker-compose.ci.yml << EOF
+          version: '3.8'
+
+          services:
+            backend:
+              build:
+                context: .
+                dockerfile: docker/backend.Dockerfile
+                target: dev
+              environment:
+                - ENV=test
+                - PORT=3000
+                - DB_HOST=db
+                - DB_PORT=5432
+                - DB_USER=test_user
+                - DB_PASSWORD=test_password
+                - DB_NAME=test_db
+              volumes:
+                - ./backend:/app
+                - ./shared:/app/shared
+                - backend-deno-cache:/app/.cache
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+                interval: 5s
+                timeout: 5s
+                retries: 3
+                start_period: 5s
+            
+            frontend:
+              build:
+                context: .
+                dockerfile: docker/frontend.Dockerfile
+                target: dev
+              environment:
+                - ENV=test
+                - VITE_API_URL=http://backend:3000
+              volumes:
+                - ./frontend:/app
+                - ./shared:/app/shared
+                - frontend-deno-cache:/app/.cache
+              depends_on:
+                backend:
+                  condition: service_healthy
+            
+            db:
+              build:
+                context: ./docker
+                dockerfile: db.Dockerfile
+              environment:
+                - POSTGRES_USER=test_user
+                - POSTGRES_PASSWORD=test_password
+                - POSTGRES_DB=test_db
+              tmpfs:
+                - /var/lib/postgresql/data
+                
+          volumes:
+            backend-deno-cache:
+            frontend-deno-cache:
+          EOF
+
+      - name: Docker Compose テスト環境構築
+        run: docker-compose -f docker-compose.ci.yml build
+
+      - name: DB起動
+        run: docker-compose -f docker-compose.ci.yml up -d db
+
+      - name: バックエンド起動
+        run: docker-compose -f docker-compose.ci.yml up -d backend
+
+      - name: バックエンド単体テスト実行
+        run: docker-compose -f docker-compose.ci.yml exec -T backend deno task test:unit
+
+      - name: バックエンド統合テスト実行
+        run: docker-compose -f docker-compose.ci.yml exec -T backend deno task test:integration
+
+      - name: フロントエンド起動
+        run: docker-compose -f docker-compose.ci.yml up -d frontend
+
+      - name: フロントエンド単体テスト実行
+        run: docker-compose -f docker-compose.ci.yml exec -T frontend deno task test:unit
+
+      - name: テストカバレッジ生成（バックエンド）
+        run: |
+          mkdir -p coverage/backend
+          docker-compose -f docker-compose.ci.yml exec -T backend deno task coverage
+          docker cp $(docker-compose -f docker-compose.ci.yml ps -q backend):/app/coverage/. coverage/backend
+
+      - name: テストカバレッジ生成（フロントエンド）
+        run: |
+          mkdir -p coverage/frontend
+          docker-compose -f docker-compose.ci.yml exec -T frontend deno task coverage
+          docker cp $(docker-compose -f docker-compose.ci.yml ps -q frontend):/app/coverage/. coverage/frontend
+
+      - name: テストカバレッジレポートアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-coverage
+          path: coverage/
+          retention-days: 7
+
+      - name: 環境停止
+        if: always()
+        run: docker-compose -f docker-compose.ci.yml down -v
+
+  e2e-test:
+    name: E2Eテスト
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: unit-tests
+    steps:
+      - name: チェックアウト
+        uses: actions/checkout@v4
+
+      - name: Docker Compose セットアップ
+        uses: KengoTODA/actions-setup-docker-compose@main
+        with:
+          version: "2.21.0"
+
+      - name: Docker イメージキャッシュ設定
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: E2Eテスト用Docker Compose設定ファイル作成
+        run: |
+          cat > docker-compose.e2e.yml << EOF
+          version: '3.8'
+
+          services:
+            backend:
+              build:
+                context: .
+                dockerfile: docker/backend.Dockerfile
+                target: dev
+              environment:
+                - ENV=test
+                - PORT=3000
+                - DB_HOST=db
+                - DB_USER=test_user
+                - DB_PASSWORD=test_password
+                - DB_NAME=test_db
+              volumes:
+                - ./backend:/app
+                - ./shared:/app/shared
+                - backend-deno-cache:/app/.cache
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+                interval: 5s
+                timeout: 5s
+                retries: 3
+                start_period: 5s
+                
+            frontend:
+              build:
+                context: .
+                dockerfile: docker/frontend.Dockerfile
+                target: dev
+              environment:
+                - ENV=test
+                - VITE_API_URL=http://backend:3000
+              ports:
+                - "5173:5173"
+              volumes:
+                - ./frontend:/app
+                - ./shared:/app/shared
+                - frontend-deno-cache:/app/.cache
+              depends_on:
+                backend:
+                  condition: service_healthy
+                  
+            e2e:
+              build:
+                context: .
+                dockerfile: docker/frontend.Dockerfile
+                target: dev
+              volumes:
+                - ./frontend:/app
+                - ./shared:/app/shared
+                - ./frontend/playwright-report:/app/playwright-report
+                - ./frontend/test-results:/app/test-results
+              environment:
+                - PLAYWRIGHT_BASE_URL=http://frontend:5173
+              depends_on:
+                frontend:
+                  condition: service_started
+              command: ["task", "test:e2e"]
+            
+            db:
+              build:
+                context: ./docker
+                dockerfile: db.Dockerfile
+              environment:
+                - POSTGRES_USER=test_user
+                - POSTGRES_PASSWORD=test_password
+                - POSTGRES_DB=test_db
+              tmpfs:
+                - /var/lib/postgresql/data
+                
+          volumes:
+            backend-deno-cache:
+            frontend-deno-cache:
+          EOF
+
+      - name: Docker Compose E2E環境構築
+        run: docker-compose -f docker-compose.e2e.yml build
+
+      - name: Playwrightインストール（E2Eコンテナ内）
+        run: docker-compose -f docker-compose.e2e.yml run --rm e2e deno run -A npm:playwright@latest install --with-deps chromium
+
+      - name: E2Eテスト実行
+        run: |
+          # DB, バックエンド、フロントエンドを起動
+          docker-compose -f docker-compose.e2e.yml up -d db backend frontend
+
+          # サービスが起動するまで待機
+          echo "サービスの起動を待機中..."
+          sleep 20
+
+          # E2Eテスト実行
+          docker-compose -f docker-compose.e2e.yml run --rm e2e deno task test:e2e
+
+      - name: E2Eテスト結果アップロード
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 14
+
+      - name: 環境停止
+        if: always()
+        run: docker-compose -f docker-compose.e2e.yml down -v
+
+  build:
+    name: 本番用ビルド
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: e2e-test
+    steps:
+      - name: チェックアウト
+        uses: actions/checkout@v4
+
+      - name: Docker Buildx セットアップ
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker イメージキャッシュ設定
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: バックエンド本番イメージビルド
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/backend.Dockerfile
+          load: true
+          tags: serverless-backend:prod
+          target: prod
+          build-args: |
+            DENO_ENV=production
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+      - name: フロントエンド本番イメージビルド
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/frontend.Dockerfile
+          load: true
+          tags: serverless-frontend:prod
+          target: prod
+          build-args: |
+            DENO_ENV=production
+            VITE_API_URL=https://api.example.com
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+      - name: キャッシュの最適化
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+      - name: ビルド成果物の抽出（バックエンド）
+        run: |
+          mkdir -p build/backend
+          docker create --name backend-container serverless-backend:prod
+          docker cp backend-container:/app/dist/. build/backend/
+          docker rm backend-container
+
+      - name: ビルド成果物の抽出（フロントエンド）
+        run: |
+          mkdir -p build/frontend
+          docker create --name frontend-container serverless-frontend:prod
+          docker cp frontend-container:/app/build/. build/frontend/
+          docker rm frontend-container
+
+      - name: ビルド成果物アップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: build/
+          retention-days: 7
+
+  deploy:
+    name: デプロイ
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    steps:
+      - name: チェックアウト
+        uses: actions/checkout@v4
+
+      - name: ビルド成果物ダウンロード
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: ./dist
+
+      - name: AWS認証設定
+        if: false # 実際のデプロイ時にコメントを外す
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deno Deploy準備
+        if: false # 実際のデプロイ時にコメントを外す
+        uses: denoland/setup-deno@v2
         with:
           deno-version: ${{ env.DENO_VERSION }}
+
+      - name: デプロイ準備
+        run: echo "デプロイの準備をしています..."
+
+      - name: フロントエンドデプロイ
+        if: false # 実際のデプロイ時にコメントを外す
+        run: |
+          echo "フロントエンドを本番環境へデプロイしています..."
+          # Deno Deployへデプロイする場合
+          # deno run -A https://deno.land/x/deploy/deployctl.ts deploy --project=your-frontend-project ./dist/frontend/index.js
+          # または AWS S3/CloudFrontへデプロイする場合
+          # aws s3 sync ./dist/frontend s3://${{ secrets.FRONTEND_BUCKET_NAME }} --delete
+          # aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"
+
+      - name: バックエンドデプロイ
+        if: false # 実際のデプロイ時にコメントを外す
+        run: |
+          echo "バックエンドを本番環境へデプロイしています..."
+          # Deno Deployへデプロイする場合
+          # deno run -A https://deno.land/x/deploy/deployctl.ts deploy --project=your-backend-project ./dist/backend/main.js
+          # または AWS Lambdaや他のサーバレスプラットフォームへのデプロイコマンド
+          # aws lambda update-function-code --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }} --zip-file fileb://dist/backend/function.zip
+
+      - name: デプロイ成功通知
+        run: echo "テスト環境へのデプロイが完了しました。"
