@@ -20,9 +20,16 @@ jobs:
     name: リントとフォーマット
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # プルリクエストでGitHubトークンを使用するための権限設定
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: チェックアウト
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Docker イメージキャッシュ設定
         uses: actions/cache@v3
@@ -67,6 +74,38 @@ jobs:
 
       - name: フロントエンドリント実行
         run: docker run --rm serverless-frontend:ci deno lint --ignore=node_modules/,npm:/,/app/.cache/ --json > frontend-lint.json || true
+
+      - name: バックエンド自動フォーマット実行
+        run: |
+          # ボリュームマウントでコードを共有してフォーマット実行
+          docker run --rm -v $(pwd)/backend:/app/backend -v $(pwd)/shared:/app/shared serverless-backend:ci deno fmt --ignore=node_modules/,npm:/,/app/.cache/
+
+      - name: フロントエンド自動フォーマット実行
+        run: |
+          # ボリュームマウントでコードを共有してフォーマット実行
+          docker run --rm -v $(pwd)/frontend:/app/frontend -v $(pwd)/shared:/app/shared serverless-frontend:ci deno fmt --ignore=node_modules/,npm:/,/app/.cache/
+
+      - name: 変更の確認
+        id: check-changes
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+          # 変更があるかどうか確認
+          git add .
+          git status --porcelain
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 自動フォーマットの変更をコミット
+        if: steps.check-changes.outputs.changes == 'true' && github.event_name == 'pull_request'
+        run: |
+          git commit -m "🤖 自動フォーマット適用" -m "GitHub Actionsによる自動フォーマット"
+          git push
+          echo "::notice::コードが自動的にフォーマットされ、変更がプッシュされました"
 
       - name: バックエンドフォーマットチェック
         run: docker run --rm serverless-backend:ci deno fmt --check --ignore=node_modules/,npm:/,/app/.cache/

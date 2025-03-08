@@ -126,13 +126,11 @@ deno task setup
 
 ### Docker構成概要
 
-<div align="center">
-  <img src="https://www.docker.com/wp-content/uploads/2023/08/logo-guide-logos-1.svg" alt="Docker Logo" width="300">
-</div>
+
 
 プロジェクトは以下のDocker構成を使用しています：
 
-```
+```txt
 docker/
 ├── backend.Dockerfile  # バックエンド用Dockerfile（Deno）
 ├── frontend.Dockerfile # フロントエンド用Dockerfile（Deno）
@@ -149,7 +147,6 @@ docker/
 - **db**: PostgreSQLデータベース（サンプルデータ自動作成）
 - **pgadmin**: データベース管理UI（オプション）
 
-<div align="center">
 
 ```mermaid
 graph TB
@@ -162,8 +159,6 @@ graph TB
     P -.->|DB管理| D
     U -->|API直接アクセス<br>localhost:3001| B
 ```
-
-</div>
 
 ### Docker環境の主な特徴
 
@@ -218,8 +213,6 @@ LOG_LEVEL=info
 
 ## 📂 プロジェクト構造
 
-<div align="center">
-
 ```mermaid
 graph TD
     subgraph "プロジェクト構造"
@@ -249,9 +242,7 @@ graph TD
     end
 ```
 
-</div>
-
-```
+```txt
 serverless-boilerplate/
 ├── .github/          # GitHub設定ファイル
 │   └── workflows/    # GitHub Actionsワークフロー
@@ -336,8 +327,6 @@ deno task test:e2e
 
 ## 🧪 テスト戦略
 
-<div align="center">
-
 ```mermaid
 flowchart TD
     subgraph "テスト戦略"
@@ -359,8 +348,6 @@ flowchart TD
     Implement -->|"Green"| Integration
     Refactor -->|"Refactor"| E2E
 ```
-
-</div>
 
 ### TDD実践ガイド
 
@@ -486,8 +473,6 @@ export class CreateUserUseCase {
 
 ## 🔄 CI/CD
 
-<div align="center">
-
 ```mermaid
 flowchart LR
     subgraph "CI/CDパイプライン"
@@ -507,8 +492,6 @@ flowchart LR
         style Deploy fill:#fbf,stroke:#333,stroke-width:2px
     end
 ```
-
-</div>
 
 このプロジェクトは、GitHub Actionsを使用したCI/CDパイプラインを提供しています。
 
@@ -582,15 +565,6 @@ A: はい。本プロジェクトのDocker設定は開発環境と本番環境�
 
 ## 📄 ライセンス
 
-<div align="center">
-  <img src="https://opensource.org/wp-content/uploads/2022/10/osi-badge-dark.svg" alt="Open Source Initiative" width="100">
-</div>
-
 このプロジェクトはMITライセンスの下で公開されています。詳細は [LICENSE](LICENSE) ファイルをご覧ください。
 
 ---
-
-<div align="center">
-  <p>🚀 高品質なプロジェクトの構築にこのボイラープレートが役立ちますように！</p>
-  <p>問題点や改善提案は<a href="https://github.com/yourusername/serverless-boilerplate/issues">Issues</a>にお寄せください。</p>
-</div>
