@@ -349,7 +349,35 @@ jobs:
         run: docker-compose -f docker-compose.e2e.yml build
 
       - name: Playwrightインストール（E2Eコンテナ内）
-        run: docker-compose -f docker-compose.e2e.yml run --rm e2e deno run -A npm:playwright@latest install --with-deps chromium
+        run: |
+          # Alpine Linuxの場合のPlaywright依存関係をインストール
+          docker-compose -f docker-compose.e2e.yml run --rm e2e sh -c "
+            # Alpine Linuxの場合の依存関係
+            if [ -f /etc/alpine-release ]; then
+              echo 'Alpine Linuxを検出しました。必要な依存関係をインストールします...'
+              apk add --no-cache \
+                webkit2gtk \
+                chromium \
+                firefox \
+                font-noto-cjk \
+                font-noto-emoji \
+                freetype \
+                harfbuzz \
+                ca-certificates \
+                ttf-freefont \
+                dbus-x11 \
+                mesa-dri-gallium
+              
+              # 環境変数でChromiumパスを設定
+              export CHROME_PATH=/usr/bin/chromium-browser
+              export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+            fi
+            
+            # Playwrightをインストール（ブラウザダウンロードをスキップ）
+            PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 deno run -A npm:playwright@latest install --with-deps chromium
+          "
+
+          echo "::notice::Playwrightのインストールが完了しました"
 
       - name: E2Eテスト実行
         run: |
@@ -386,8 +414,27 @@ jobs:
 
           echo "すべてのサービスが正常に起動しました"
 
-          # E2Eテスト実行
-          docker-compose -f docker-compose.e2e.yml run --rm e2e deno task test:e2e
+          # E2Eテスト実行（Alpine Linuxのシステムブラウザを使用）
+          docker-compose -f docker-compose.e2e.yml run --rm \
+            -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+            -e CHROME_PATH=/usr/bin/chromium-browser \
+            e2e sh -c "
+              # Alpine Linuxの環境設定
+              if [ -f /etc/alpine-release ]; then
+                export CHROME_PATH=/usr/bin/chromium-browser
+                export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+              fi
+              
+              # デバッグ情報
+              echo '使用するブラウザパス: $CHROME_PATH'
+              echo 'Playwrightの設定確認'
+              
+              # テスト実行
+              deno task test:e2e || {
+                echo '::error::E2Eテストに失敗しました。ブラウザの設定を確認してください。'
+                exit 1
+              }
+            "
 
       - name: E2Eテスト結果アップロード
         if: always()
