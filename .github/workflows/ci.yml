@@ -83,6 +83,11 @@ jobs:
 
           echo "::group::フロントエンドリント"
           docker run --rm serverless-frontend:ci deno lint --ignore=node_modules/,npm:/,/app/.cache/ --json > frontend-lint.json || true
+          # デバッグ用：リント結果のJSON形式を確認
+          echo "フロントエンドリント結果のフォーマット確認:"
+          cat frontend-lint.json | jq 'type' || true
+          echo "最初の数行を表示:"
+          cat frontend-lint.json | head -10 || true
           echo "::endgroup::"
 
           echo "::group::バックエンド自動フォーマット"
@@ -136,7 +141,7 @@ jobs:
           if [ -f frontend-lint.json ] && [ -s frontend-lint.json ]; then
             echo "::warning::フロントエンドのリントエラーが検出されました"
             echo "リントエラー詳細:"
-            cat frontend-lint.json | jq -r '.[] | "::error file=\(.file),line=\(.range.start.line),col=\(.range.start.col)::\(.message)"' || true
+            cat frontend-lint.json | jq -r 'if type == "array" then .[] else . end | if has("message") then "::error file=\(.file // "unknown"),line=\(.range.start.line // 0),col=\(.range.start.col // 0)::\(.message)" else empty end' || true
             lint_errors=true
           else
             echo "::notice::フロントエンドのリントエラーはありません"
