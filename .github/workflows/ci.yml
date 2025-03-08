@@ -77,13 +77,15 @@ jobs:
 
       - name: バックエンド自動フォーマット実行
         run: |
-          # ボリュームマウントでコードを共有してフォーマット実行
-          docker run --rm -v $(pwd)/backend:/app/backend -v $(pwd)/shared:/app/shared serverless-backend:ci deno fmt --ignore=node_modules/,npm:/,/app/.cache/
+          # コンテナ内のワーキングディレクトリを考慮したフォーマット実行
+          docker run --rm -v $(pwd):/workspace -w /workspace serverless-backend:ci deno fmt backend/ shared/ --ignore=node_modules/,npm:/,.cache/
+          echo "::notice::バックエンドのコードが自動フォーマットされました"
 
       - name: フロントエンド自動フォーマット実行
         run: |
-          # ボリュームマウントでコードを共有してフォーマット実行
-          docker run --rm -v $(pwd)/frontend:/app/frontend -v $(pwd)/shared:/app/shared serverless-frontend:ci deno fmt --ignore=node_modules/,npm:/,/app/.cache/
+          # コンテナ内のワーキングディレクトリを考慮したフォーマット実行
+          docker run --rm -v $(pwd):/workspace -w /workspace serverless-frontend:ci deno fmt frontend/ shared/ --ignore=node_modules/,npm:/,.cache/
+          echo "::notice::フロントエンドのコードが自動フォーマットされました"
 
       - name: 変更の確認
         id: check-changes
@@ -96,8 +98,10 @@ jobs:
           git status --porcelain
           if [ -n "$(git status --porcelain)" ]; then
             echo "changes=true" >> $GITHUB_OUTPUT
+            echo "::notice::フォーマットにより変更が検出されました"
           else
             echo "changes=false" >> $GITHUB_OUTPUT
+            echo "::notice::フォーマットによる変更はありませんでした"
           fi
 
       - name: 自動フォーマットの変更をコミット
@@ -106,12 +110,6 @@ jobs:
           git commit -m "🤖 自動フォーマット適用" -m "GitHub Actionsによる自動フォーマット"
           git push
           echo "::notice::コードが自動的にフォーマットされ、変更がプッシュされました"
-
-      - name: バックエンドフォーマットチェック
-        run: docker run --rm serverless-backend:ci deno fmt --check --ignore=node_modules/,npm:/,/app/.cache/
-
-      - name: フロントエンドフォーマットチェック
-        run: docker run --rm serverless-frontend:ci deno fmt --check --ignore=node_modules/,npm:/,/app/.cache/
 
       - name: リント結果確認
         id: lint-check
