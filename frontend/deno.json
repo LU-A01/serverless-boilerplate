@@ -1,0 +1,33 @@
+{
+  "tasks": {
+    "dev": "deno run -A --node-modules-dir npm:vite dev",
+    "build": "deno run -A --node-modules-dir npm:vite build",
+    "preview": "deno run -A --node-modules-dir npm:vite preview",
+    "test": "deno test -A",
+    "test:unit": "deno run -A --node-modules-dir npm:vitest run",
+    "test:e2e": "deno run -A --node-modules-dir npm:playwright test",
+    "check": "deno run -A --node-modules-dir npm:svelte-kit sync && deno run -A --node-modules-dir npm:svelte-check --tsconfig ./tsconfig.json",
+    "format": "deno fmt"
+  },
+  "lint": {
+    "include": ["src/"],
+    "exclude": ["npm:/", "node_modules/", ".svelte-kit/", ".cache/", "build/"],
+    "rules": {
+      "tags": ["recommended"],
+      "exclude": ["no-explicit-any", "require-await", "no-restricted-syntax"]
+    }
+  },
+  "fmt": {
+    "include": ["src/", "*.ts", "*.js", "*.svelte"],
+    "exclude": ["npm:/", "node_modules/", ".svelte-kit/", ".cache/", "build/"]
+  },
+  "imports": {
+    "$lib/": "./src/lib/",
+    "$routes/": "./src/routes/"
+  },
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
+  },
+  "nodeModulesDir": true
+} 

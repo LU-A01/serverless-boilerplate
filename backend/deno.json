@@ -1,14 +1,31 @@
 {
   "imports": {
-    "hono": "jsr:@hono/hono@^4.7.4"
+    "hono": "jsr:@hono/hono@^4.7.4",
+    "@/": "./src/"
   },
   "tasks": {
     "start": "deno run --allow-net main.ts",
     "dev": "deno run --allow-net --watch main.ts",
-    "test": "echo 'test passed!'",
+    "test": "deno test -A",
+    "test:unit": "deno test -A src/domain",
+    "test:integration": "deno test -A src/adapters",
+    "test:e2e": "deno test -A tests/e2e",
+    "coverage": "deno test -A --coverage=coverage && deno coverage coverage",
     "fmt": "deno fmt",
-    "lint": "deno lint",
-    "build": "echo 'build completed!'"
+    "lint": "deno lint --ignore=npm:/,node_modules/,.cache/",
+    "build": "deno compile -A main.ts"
+  },
+  "lint": {
+    "include": ["src/", "tests/"],
+    "exclude": ["npm:/", "node_modules/", ".cache/"],
+    "rules": {
+      "tags": ["recommended"],
+      "exclude": ["no-explicit-any", "require-await", "no-restricted-syntax"]
+    }
+  },
+  "fmt": {
+    "include": ["src/", "tests/", "*.ts"],
+    "exclude": ["npm:/", "node_modules/", ".cache/"]
   },
   "compilerOptions": {
     "jsx": "precompile",

@@ -63,16 +63,16 @@ jobs:
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
       - name: バックエンドリント実行
-        run: docker run --rm serverless-backend:ci deno lint --json > backend-lint.json || true
+        run: docker run --rm serverless-backend:ci deno lint --ignore=node_modules/,npm:/,/app/.cache/ --json > backend-lint.json || true
 
       - name: フロントエンドリント実行
-        run: docker run --rm serverless-frontend:ci deno lint --json > frontend-lint.json || true
+        run: docker run --rm serverless-frontend:ci deno lint --ignore=node_modules/,npm:/,/app/.cache/ --json > frontend-lint.json || true
 
       - name: バックエンドフォーマットチェック
-        run: docker run --rm serverless-backend:ci deno fmt --check
+        run: docker run --rm serverless-backend:ci deno fmt --check --ignore=node_modules/,npm:/,/app/.cache/
 
       - name: フロントエンドフォーマットチェック
-        run: docker run --rm serverless-frontend:ci deno fmt --check
+        run: docker run --rm serverless-frontend:ci deno fmt --check --ignore=node_modules/,npm:/,/app/.cache/
 
       - name: リント結果確認
         id: lint-check

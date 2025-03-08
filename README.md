@@ -12,9 +12,9 @@
 > TDDとクリーンアーキテクチャを基盤とした開発環境を提供します。
 
 <div align="center">
-  <img src="https://deno.com/images/artwork/hashrock_simple.png" alt="Deno Logo" width="120">
-  <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/svelte/svelte-original.svg" alt="SvelteKit Logo" width="120">
-  <img src="https://raw.githubusercontent.com/honojs/hono/main/.github/docs/images/icons/icon.svg" alt="Hono.js Logo" width="120">
+  <img src="https://deno.land/logo.svg" alt="Deno Logo" width="120">
+  <img src="https://upload.wikimedia.org/wikipedia/commons/1/1b/Svelte_Logo.svg" alt="SvelteKit Logo" width="120">
+  <img src="https://avatars.githubusercontent.com/u/98495527" alt="Hono.js Logo" width="120">
 </div>
 
 ---
@@ -61,7 +61,7 @@
 このボイラープレートは、実用性とスケーラビリティのバランスを考慮した**実践的クリーンアーキテクチャ**を採用しています。
 
 <div align="center">
-  <img src="https://miro.medium.com/v2/resize:fit:720/format:webp/1*yR4C1B-YfMh5zqpbHzTyag.png" alt="クリーンアーキテクチャ図" width="500">
+  <img src="https://raw.githubusercontent.com/mattia-battiston/clean-architecture-example/master/docs/images/clean-architecture.png" alt="クリーンアーキテクチャ図" width="500">
 </div>
 
 ### テスト駆動開発 (TDD)
@@ -127,7 +127,7 @@ deno task setup
 ### Docker構成概要
 
 <div align="center">
-  <img src="https://www.docker.com/wp-content/uploads/2021/09/Docker-Logo-White-RGB_Moby.png" alt="Docker Logo" width="300">
+  <img src="https://www.docker.com/wp-content/uploads/2023/08/logo-guide-logos-1.svg" alt="Docker Logo" width="300">
 </div>
 
 プロジェクトは以下のDocker構成を使用しています：
@@ -150,7 +150,19 @@ docker/
 - **pgadmin**: データベース管理UI（オプション）
 
 <div align="center">
-  <img src="https://mermaid.ink/img/pako:eNqFkU9rwzAMxb-K0elLGbmVwDoYuyyw0bNrq2nY_CPYzujS776kzdJ1Yz1Jz0_vSULeqMwLpYxWdq8xrG32-WJJPtUVrTc3_XJY8-vgUX5_LjolEVzKEEON9Tgm0rY4YR6QS3_YVqUmVfaNrI8MoUOPcxuLBgx8GtpCXLM3PdYCHOAMnWQR-c1FD4NcKNBibCzqnvZkEWaMFTiYMfOQGq4DdTwJA3oY4hJO6FNl1h_zcOJ3aARD8DON_Ldc3X_dqwoDcZgmHjIXPGNQVyUmEsafkB_0V0Fz4dEIvqZqP83jtZG9w-NNrchT6LBDFS_2rjWiVLLxGFi6crlSdvRkJm7xQ9X9BSuR4AXsSDnzzYCBQxFZ2ZR_GtVuJ-QvmnGvYA?type=png" alt="Docker Compose概略図" width="600">
+
+```mermaid
+graph TB
+    subgraph "Docker Compose環境"
+    F[frontend<br>SvelteKit+Deno] -->|API呼び出し| B[backend<br>Hono.js+Deno]
+    B -->|データ永続化| D[(database<br>PostgreSQL)]
+    end
+    U((ユーザー)) -->|localhost:5173| F
+    A((管理者)) -->|localhost:5050| P[pgadmin<br>DB管理UI]
+    P -.->|DB管理| D
+    U -->|API直接アクセス<br>localhost:3001| B
+```
+
 </div>
 
 ### Docker環境の主な特徴
@@ -207,7 +219,36 @@ LOG_LEVEL=info
 ## 📂 プロジェクト構造
 
 <div align="center">
-  <img src="https://mermaid.ink/img/pako:eNp1kc9PwzAMxf9K5FMnkHpDiCEOaAI0Jo5wS5MuUtPEyh9Dqva_47Yd0jRxip_f97PjXJgtIhvYlNvSJfwpbFi4spL2Cc2rrO313Rc4l9UplsTCNS-JxDFUwkr3f9_gHoKLTwFJKnWJvHLDsDj9JYWZMnqpXYuGsWA4GsLXXZuXo4N5R4VeP9jzcuJ8-Zp5_kbVIg0aRfDGtXH7wSbeRrcHlO7o-Q-hpd8S-mbdUXdIkQnqJ-UuuH2QZRM5ek6eT2y16_ZlPbJw9DwGmxpKGTjR44l9qr0Yw1PQ70kL7VG21E6U_QGPwXPmqPCvqf1BIXrVF_RsUlwDVHRcyWUh12CX0oJVvEYyAGywpHXt8O7QpY6dLd-ZjJPZA2RUHSFkVr1mtrPpbq-FBWsylHcW7YEXuZw4nN0AQAQlCA?type=png" alt="ディレクトリ構造図" width="500">
+
+```mermaid
+graph TD
+    subgraph "プロジェクト構造"
+        Root[./<br>プロジェクトルート]
+        Backend[./backend/<br>バックエンド]
+        Frontend[./frontend/<br>フロントエンド]
+        Shared[./shared/<br>共有コード]
+        Docker[./docker/<br>Dockerファイル]
+        GitHub[./.github/<br>GitHub設定]
+        
+        Root --> Backend
+        Root --> Frontend
+        Root --> Shared
+        Root --> Docker
+        Root --> GitHub
+        
+        Backend --> Domain[src/domain/<br>ドメインモデル]
+        Backend --> UseCases[src/usecases/<br>ユースケース]
+        Backend --> Adapters[src/adapters/<br>アダプター]
+        Backend --> API[src/api/<br>APIエンドポイント]
+        
+        Frontend --> Routes[src/routes/<br>ページ]
+        Frontend --> Lib[src/lib/<br>共通コンポーネント]
+        
+        Shared --> Models[models/<br>共有モデル]
+        Shared --> DTO[dto/<br>データ転送オブジェクト]
+    end
+```
+
 </div>
 
 ```
@@ -296,7 +337,29 @@ deno task test:e2e
 ## 🧪 テスト戦略
 
 <div align="center">
-  <img src="https://mermaid.ink/img/pako:eNqNkk9rwzAMxb-K0GkrLOwWMpgysnUw2A7drbadhmPZJHZxY-J_G1n-0bnN5qP0nqQnyd1TYRXRlnalrpzTn6oSqTKl0o_C_K7qdD3eH-qqL5ciqSQPl7dOrZu3GCWybkPnUxOGcJ1FUXK5ykSm07Qv4P5Gj9cdTsrSXJjA3HzWRUeGLKHHXxP9A5utrXcb2H7A7dUXwAA7aDMm1C7Mu6HhTqBBGiVBYwP7SiHWKsGQBnYmJg6uFZ0W4ZewaVrXGDwKbcONsw3D-R_7oi_RxS5QwQN8XcwGpVdcxOBGJMcsLwbOlRjI6eMMzhUl2o-Tn7_Ixp_S4MGmwXWWW5rAnnVL1oZHZa_rnfwS2r1nW-sEIR04QOgHvtlPdhBTKVz1WIHnXZHFtGcPrjDlXLvgR3UZdVzRCCFODo5-PZjm4M2v8kj0ZJL5XYaWfsjXDRK2aHnFrMr2yq5V1u3RGJS82nXb-t2S3-V8sOgPEDOxog?type=png" alt="テスト戦略図" width="600">
+
+```mermaid
+flowchart TD
+    subgraph "テスト戦略"
+        Write[テスト作成] --> Run[テスト実行]
+        Run -->|失敗| Implement[実装]
+        Implement --> Run
+        Run -->|成功| Refactor[リファクタリング]
+        Refactor --> Run
+    end
+    
+    subgraph "テスト種別"
+        Unit[ユニットテスト]
+        Integration[統合テスト]
+        E2E[E2Eテスト]
+    end
+    
+    Unit --> Integration --> E2E
+    Write -->|"Red"| Unit
+    Implement -->|"Green"| Integration
+    Refactor -->|"Refactor"| E2E
+```
+
 </div>
 
 ### TDD実践ガイド
@@ -424,7 +487,27 @@ export class CreateUserUseCase {
 ## 🔄 CI/CD
 
 <div align="center">
-  <img src="https://mermaid.ink/img/pako:eNp9k8FuwjAMhl_FymmgaYcJaUiDw6ZJgMRtN5K2A6RpGkkKVRXefU5KGUww5ZT4-_3HsR3foJAKYANHYbSttyEfZTHV3UYfpJ0pGaLUlprJ9GUcJPIcJvNXPRvMRuNsDI_TVIhlq12J8JnLgZS5o9LZ2cq0KD7dLYjLlLnTZ0O_Rm20w1RMxmKuZk_zVSTTqENVghMnDjk8eYeAUKbEpRGdWPdj1hbvl2LBRUXKI6ej25x3t2PJE9BRWpCLNtYtO3PsCm5qeKdWyuotyH3XD9s4uCLkE72AJFG6RA43I2TY63e7I_hWYcPfdxF6D6FVh8NZ2kTwQmWJ-mSPPKPdRkjTcZ9ztcKWTaIY2a6o_iVVvQVIE7vZtvDhQZkGaXYQ7g7DUBXvpKnE4XUmvHgHEGKGpj5ILwXPFWM97KH1_RdUw91xyPWW6qN1d6EUGnxRR0mNJ8c0aGzNO4WDwJQsIlTSPDYCjNMWFcjwYqwTdFHU5-q-Bx9uiKj4D0c2oaTgsOCb8Q7qYRMVrMGBLc-pBUOZKWGHWxhAcGGtrY9wgA2sUy4JD5DEk3gPyeOvjrsGK37Kt0-2cHKY7o5Z9AVNJBhp?type=png" alt="CI/CD構成図" width="700">
+
+```mermaid
+flowchart LR
+    subgraph "CI/CDパイプライン"
+        direction LR
+        PR[コード変更] --> Lint[リント]
+        Lint --> UnitTest[ユニットテスト]
+        UnitTest --> IntegrationTest[統合テスト]
+        IntegrationTest --> E2E[E2Eテスト]
+        E2E --> Build[ビルド]
+        Build --> Deploy[デプロイ]
+        
+        style Lint fill:#f9f,stroke:#333,stroke-width:2px
+        style UnitTest fill:#bbf,stroke:#333,stroke-width:2px
+        style IntegrationTest fill:#bbf,stroke:#333,stroke-width:2px
+        style E2E fill:#bbf,stroke:#333,stroke-width:2px
+        style Build fill:#bfb,stroke:#333,stroke-width:2px
+        style Deploy fill:#fbf,stroke:#333,stroke-width:2px
+    end
+```
+
 </div>
 
 このプロジェクトは、GitHub Actionsを使用したCI/CDパイプラインを提供しています。
@@ -500,7 +583,7 @@ A: はい。本プロジェクトのDocker設定は開発環境と本番環境�
 ## 📄 ライセンス
 
 <div align="center">
-  <img src="https://opensource.org/files/OSIApproved_1.png" alt="Open Source Initiative" width="100">
+  <img src="https://opensource.org/wp-content/uploads/2022/10/osi-badge-dark.svg" alt="Open Source Initiative" width="100">
 </div>
 
 このプロジェクトはMITライセンスの下で公開されています。詳細は [LICENSE](LICENSE) ファイルをご覧ください。

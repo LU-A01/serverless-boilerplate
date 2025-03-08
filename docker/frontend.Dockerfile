@@ -4,6 +4,7 @@ WORKDIR /app
 ENV DENO_DIR=/app/.cache/deno
 ENV DENO_INSTALL_ROOT=/usr/local
 ENV DENO_NODE_COMPAT=1
+ENV NODE_OPTIONS="--no-warnings"
 
 # 依存関係ステージ - 依存関係のインストールのみを行う
 FROM base AS deps

@@ -1,0 +1,36 @@
+{
+  "tasks": {
+    "dev": "deno run -A --watch main.ts",
+    "build": "deno run -A build.ts",
+    "test": "deno test -A",
+    "lint": "deno lint --ignore=node_modules/,npm:/,/app/.cache/",
+    "fmt": "deno fmt --ignore=node_modules/,npm:/,/app/.cache/"
+  },
+  "lint": {
+    "include": ["backend/src/", "frontend/src/", "shared/", "tools/"],
+    "exclude": ["npm:/", "node_modules/", ".svelte-kit/", ".cache/"],
+    "rules": {
+      "tags": ["recommended"],
+      "exclude": ["no-explicit-any", "require-await", "no-restricted-syntax"]
+    }
+  },
+  "fmt": {
+    "include": ["backend/src/", "frontend/src/", "shared/", "tools/", "*.ts", "*.js"],
+    "exclude": ["npm:/", "node_modules/", ".svelte-kit/", ".cache/", "dist/", "build/"],
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "useTabs": false,
+    "semiColons": true,
+    "singleQuote": true,
+    "proseWrap": "preserve"
+  },
+  "imports": {
+    "@backend/": "./backend/src/",
+    "@frontend/": "./frontend/src/",
+    "@shared/": "./shared/"
+  },
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "dom.asynciterable", "deno.ns"]
+  },
+  "nodeModulesDir": true
+} 
