@@ -11,12 +11,6 @@
 > フルスタックTypeScript・モノレポ構成によるサーバレスWebアプリケーション構築ボイラープレートです。
 > TDDとクリーンアーキテクチャを基盤とした開発環境を提供します。
 
-<div align="center">
-  <img src="https://deno.land/logo.svg" alt="Deno Logo" width="120">
-  <img src="https://upload.wikimedia.org/wikipedia/commons/1/1b/Svelte_Logo.svg" alt="SvelteKit Logo" width="120">
-  <img src="https://avatars.githubusercontent.com/u/98495527" alt="Hono.js Logo" width="120">
-</div>
-
 ---
 
 ## 📋 目次
@@ -59,10 +53,6 @@
 ## 🏛️ アーキテクチャ
 
 このボイラープレートは、実用性とスケーラビリティのバランスを考慮した**実践的クリーンアーキテクチャ**を採用しています。
-
-<div align="center">
-  <img src="https://raw.githubusercontent.com/mattia-battiston/clean-architecture-example/master/docs/images/clean-architecture.png" alt="クリーンアーキテクチャ図" width="500">
-</div>
 
 ### テスト駆動開発 (TDD)
 - **ユニットテスト**: ドメインロジックの単体テスト (Vitest/Deno Test)

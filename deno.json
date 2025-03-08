@@ -17,11 +17,11 @@
   "fmt": {
     "include": ["backend/src/", "frontend/src/", "shared/", "tools/", "*.ts", "*.js"],
     "exclude": ["npm:/", "node_modules/", ".svelte-kit/", ".cache/", "dist/", "build/"],
-    "lineWidth": 100,
+    "lineWidth": 80,
     "indentWidth": 2,
     "useTabs": false,
     "semiColons": true,
-    "singleQuote": true,
+    "singleQuote": false,
     "proseWrap": "preserve"
   },
   "imports": {

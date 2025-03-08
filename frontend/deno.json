@@ -19,7 +19,13 @@
   },
   "fmt": {
     "include": ["src/", "*.ts", "*.js", "*.svelte"],
-    "exclude": ["npm:/", "node_modules/", ".svelte-kit/", ".cache/", "build/"]
+    "exclude": ["npm:/", "node_modules/", ".svelte-kit/", ".cache/", "build/"],
+    "lineWidth": 80,
+    "indentWidth": 2,
+    "useTabs": false,
+    "semiColons": true,
+    "singleQuote": false,
+    "proseWrap": "preserve"
   },
   "imports": {
     "$lib/": "./src/lib/",

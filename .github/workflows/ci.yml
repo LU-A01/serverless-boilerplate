@@ -14,6 +14,12 @@ env:
   DENO_VERSION: 2.2.3
   DOCKER_BUILDKIT: 1
   COMPOSE_DOCKER_CLI_BUILD: 1
+  # テスト環境用の共通設定
+  TEST_DB_USER: test_user
+  TEST_DB_PASSWORD: test_password
+  TEST_DB_NAME: test_db
+  TEST_BACKEND_PORT: 3000
+  TEST_FRONTEND_PORT: 5173
 
 jobs:
   lint-and-format:
@@ -69,23 +75,25 @@ jobs:
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
-      - name: バックエンドリント実行
-        run: docker run --rm serverless-backend:ci deno lint --ignore=node_modules/,npm:/,/app/.cache/ --json > backend-lint.json || true
-
-      - name: フロントエンドリント実行
-        run: docker run --rm serverless-frontend:ci deno lint --ignore=node_modules/,npm:/,/app/.cache/ --json > frontend-lint.json || true
-
-      - name: バックエンド自動フォーマット実行
+      - name: リント＆フォーマット実行
         run: |
-          # コンテナ内のワーキングディレクトリを考慮したフォーマット実行
+          echo "::group::バックエンドリント"
+          docker run --rm serverless-backend:ci deno lint --ignore=node_modules/,npm:/,/app/.cache/ --json > backend-lint.json || true
+          echo "::endgroup::"
+
+          echo "::group::フロントエンドリント"
+          docker run --rm serverless-frontend:ci deno lint --ignore=node_modules/,npm:/,/app/.cache/ --json > frontend-lint.json || true
+          echo "::endgroup::"
+
+          echo "::group::バックエンド自動フォーマット"
           docker run --rm -v $(pwd):/workspace -w /workspace serverless-backend:ci deno fmt backend/ shared/ --ignore=node_modules/,npm:/,.cache/
           echo "::notice::バックエンドのコードが自動フォーマットされました"
+          echo "::endgroup::"
 
-      - name: フロントエンド自動フォーマット実行
-        run: |
-          # コンテナ内のワーキングディレクトリを考慮したフォーマット実行
+          echo "::group::フロントエンド自動フォーマット"
           docker run --rm -v $(pwd):/workspace -w /workspace serverless-frontend:ci deno fmt frontend/ shared/ --ignore=node_modules/,npm:/,.cache/
           echo "::notice::フロントエンドのコードが自動フォーマットされました"
+          echo "::endgroup::"
 
       - name: 変更の確認
         id: check-changes
@@ -146,11 +154,200 @@ jobs:
             frontend-lint.json
           retention-days: 7
 
+  create-compose-configs:
+    name: Docker Compose設定生成
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      compose-ci-file: docker-compose.ci.yml
+      compose-e2e-file: docker-compose.e2e.yml
+    steps:
+      - name: 共通設定ファイル作成
+        id: create-base-config
+        run: |
+          cat > docker-compose.base.yml << EOF
+          version: '3.8'
+
+          services:
+            db:
+              build:
+                context: ./docker
+                dockerfile: db.Dockerfile
+              environment:
+                - POSTGRES_USER=${{ env.TEST_DB_USER }}
+                - POSTGRES_PASSWORD=${{ env.TEST_DB_PASSWORD }}
+                - POSTGRES_DB=${{ env.TEST_DB_NAME }}
+              tmpfs:
+                - /var/lib/postgresql/data
+              healthcheck:
+                test: ["CMD-SHELL", "pg_isready -U ${{ env.TEST_DB_USER }}"]
+                interval: 5s
+                timeout: 5s
+                retries: 5
+                start_period: 5s
+                
+          volumes:
+            backend-deno-cache:
+            frontend-deno-cache:
+          EOF
+
+          echo "::notice::共通Docker Compose設定ファイルを作成しました"
+
+      - name: テスト用Docker Compose設定ファイル作成
+        run: |
+          cat > docker-compose.ci.yml << EOF
+          version: '3.8'
+
+          services:
+            backend:
+              build:
+                context: .
+                dockerfile: docker/backend.Dockerfile
+                target: dev
+              environment:
+                - ENV=test
+                - PORT=${{ env.TEST_BACKEND_PORT }}
+                - DB_HOST=db
+                - DB_PORT=5432
+                - DB_USER=${{ env.TEST_DB_USER }}
+                - DB_PASSWORD=${{ env.TEST_DB_PASSWORD }}
+                - DB_NAME=${{ env.TEST_DB_NAME }}
+              volumes:
+                - ./backend:/app
+                - ./shared:/app/shared
+                - backend-deno-cache:/app/.cache
+              depends_on:
+                db:
+                  condition: service_healthy
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:${{ env.TEST_BACKEND_PORT }}/health"]
+                interval: 5s
+                timeout: 5s
+                retries: 3
+                start_period: 5s
+            
+            frontend:
+              build:
+                context: .
+                dockerfile: docker/frontend.Dockerfile
+                target: dev
+              environment:
+                - ENV=test
+                - VITE_API_URL=http://backend:${{ env.TEST_BACKEND_PORT }}
+              volumes:
+                - ./frontend:/app
+                - ./shared:/app/shared
+                - frontend-deno-cache:/app/.cache
+              depends_on:
+                backend:
+                  condition: service_healthy
+            
+            db:
+              extends:
+                file: docker-compose.base.yml
+                service: db
+
+          volumes:
+            backend-deno-cache:
+            frontend-deno-cache:
+          EOF
+
+          echo "::notice::テスト用Docker Compose設定ファイルを作成しました"
+
+      - name: E2Eテスト用Docker Compose設定ファイル作成
+        run: |
+          cat > docker-compose.e2e.yml << EOF
+          version: '3.8'
+
+          services:
+            backend:
+              build:
+                context: .
+                dockerfile: docker/backend.Dockerfile
+                target: dev
+              environment:
+                - ENV=test
+                - PORT=${{ env.TEST_BACKEND_PORT }}
+                - DB_HOST=db
+                - DB_USER=${{ env.TEST_DB_USER }}
+                - DB_PASSWORD=${{ env.TEST_DB_PASSWORD }}
+                - DB_NAME=${{ env.TEST_DB_NAME }}
+              volumes:
+                - ./backend:/app
+                - ./shared:/app/shared
+                - backend-deno-cache:/app/.cache
+              depends_on:
+                db:
+                  condition: service_healthy
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:${{ env.TEST_BACKEND_PORT }}/health"]
+                interval: 5s
+                timeout: 5s
+                retries: 3
+                start_period: 5s
+                
+            frontend:
+              build:
+                context: .
+                dockerfile: docker/frontend.Dockerfile
+                target: dev
+              environment:
+                - ENV=test
+                - VITE_API_URL=http://backend:${{ env.TEST_BACKEND_PORT }}
+              ports:
+                - "${{ env.TEST_FRONTEND_PORT }}:${{ env.TEST_FRONTEND_PORT }}"
+              volumes:
+                - ./frontend:/app
+                - ./shared:/app/shared
+                - frontend-deno-cache:/app/.cache
+              depends_on:
+                backend:
+                  condition: service_healthy
+                  
+            e2e:
+              build:
+                context: .
+                dockerfile: docker/frontend.Dockerfile
+                target: dev
+              volumes:
+                - ./frontend:/app
+                - ./shared:/app/shared
+                - ./frontend/playwright-report:/app/playwright-report
+                - ./frontend/test-results:/app/test-results
+              environment:
+                - PLAYWRIGHT_BASE_URL=http://frontend:${{ env.TEST_FRONTEND_PORT }}
+              depends_on:
+                frontend:
+                  condition: service_started
+              command: ["task", "test:e2e"]
+            
+            db:
+              extends:
+                file: docker-compose.base.yml
+                service: db
+                
+          volumes:
+            backend-deno-cache:
+            frontend-deno-cache:
+          EOF
+
+          echo "::notice::E2Eテスト用Docker Compose設定ファイルを作成しました"
+
+      - name: Compose設定ファイルのアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-configs
+          path: |
+            docker-compose.base.yml
+            docker-compose.ci.yml
+            docker-compose.e2e.yml
+          retention-days: 1
+
   unit-tests:
     name: ユニットテスト
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: lint-and-format
+    needs: [lint-and-format, create-compose-configs]
     steps:
       - name: チェックアウト
         uses: actions/checkout@v4
@@ -168,67 +365,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: テスト用Docker Compose設定ファイル作成
-        run: |
-          cat > docker-compose.ci.yml << EOF
-          version: '3.8'
-
-          services:
-            backend:
-              build:
-                context: .
-                dockerfile: docker/backend.Dockerfile
-                target: dev
-              environment:
-                - ENV=test
-                - PORT=3000
-                - DB_HOST=db
-                - DB_PORT=5432
-                - DB_USER=test_user
-                - DB_PASSWORD=test_password
-                - DB_NAME=test_db
-              volumes:
-                - ./backend:/app
-                - ./shared:/app/shared
-                - backend-deno-cache:/app/.cache
-              healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-                interval: 5s
-                timeout: 5s
-                retries: 3
-                start_period: 5s
-            
-            frontend:
-              build:
-                context: .
-                dockerfile: docker/frontend.Dockerfile
-                target: dev
-              environment:
-                - ENV=test
-                - VITE_API_URL=http://backend:3000
-              volumes:
-                - ./frontend:/app
-                - ./shared:/app/shared
-                - frontend-deno-cache:/app/.cache
-              depends_on:
-                backend:
-                  condition: service_healthy
-            
-            db:
-              build:
-                context: ./docker
-                dockerfile: db.Dockerfile
-              environment:
-                - POSTGRES_USER=test_user
-                - POSTGRES_PASSWORD=test_password
-                - POSTGRES_DB=test_db
-              tmpfs:
-                - /var/lib/postgresql/data
-                
-          volumes:
-            backend-deno-cache:
-            frontend-deno-cache:
-          EOF
+      - name: Compose設定ファイルのダウンロード
+        uses: actions/download-artifact@v4
+        with:
+          name: compose-configs
 
       - name: Docker Compose テスト環境構築
         run: docker-compose -f docker-compose.ci.yml build
@@ -278,7 +418,7 @@ jobs:
     name: E2Eテスト
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: unit-tests
+    needs: [unit-tests, create-compose-configs]
     steps:
       - name: チェックアウト
         uses: actions/checkout@v4
@@ -296,85 +436,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: E2Eテスト用Docker Compose設定ファイル作成
-        run: |
-          cat > docker-compose.e2e.yml << EOF
-          version: '3.8'
-
-          services:
-            backend:
-              build:
-                context: .
-                dockerfile: docker/backend.Dockerfile
-                target: dev
-              environment:
-                - ENV=test
-                - PORT=3000
-                - DB_HOST=db
-                - DB_USER=test_user
-                - DB_PASSWORD=test_password
-                - DB_NAME=test_db
-              volumes:
-                - ./backend:/app
-                - ./shared:/app/shared
-                - backend-deno-cache:/app/.cache
-              healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-                interval: 5s
-                timeout: 5s
-                retries: 3
-                start_period: 5s
-                
-            frontend:
-              build:
-                context: .
-                dockerfile: docker/frontend.Dockerfile
-                target: dev
-              environment:
-                - ENV=test
-                - VITE_API_URL=http://backend:3000
-              ports:
-                - "5173:5173"
-              volumes:
-                - ./frontend:/app
-                - ./shared:/app/shared
-                - frontend-deno-cache:/app/.cache
-              depends_on:
-                backend:
-                  condition: service_healthy
-                  
-            e2e:
-              build:
-                context: .
-                dockerfile: docker/frontend.Dockerfile
-                target: dev
-              volumes:
-                - ./frontend:/app
-                - ./shared:/app/shared
-                - ./frontend/playwright-report:/app/playwright-report
-                - ./frontend/test-results:/app/test-results
-              environment:
-                - PLAYWRIGHT_BASE_URL=http://frontend:5173
-              depends_on:
-                frontend:
-                  condition: service_started
-              command: ["task", "test:e2e"]
-            
-            db:
-              build:
-                context: ./docker
-                dockerfile: db.Dockerfile
-              environment:
-                - POSTGRES_USER=test_user
-                - POSTGRES_PASSWORD=test_password
-                - POSTGRES_DB=test_db
-              tmpfs:
-                - /var/lib/postgresql/data
-                
-          volumes:
-            backend-deno-cache:
-            frontend-deno-cache:
-          EOF
+      - name: Compose設定ファイルのダウンロード
+        uses: actions/download-artifact@v4
+        with:
+          name: compose-configs
 
       - name: Docker Compose E2E環境構築
         run: docker-compose -f docker-compose.e2e.yml build
@@ -480,6 +545,12 @@ jobs:
           name: build-artifacts
           path: build/
           retention-days: 7
+
+      - name: コンテナクリーンアップ
+        if: always()
+        run: |
+          docker rm -f backend-container frontend-container 2>/dev/null || true
+          docker image prune -f
 
   deploy:
     name: デプロイ

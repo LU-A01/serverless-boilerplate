@@ -25,7 +25,13 @@
   },
   "fmt": {
     "include": ["src/", "tests/", "*.ts"],
-    "exclude": ["npm:/", "node_modules/", ".cache/"]
+    "exclude": ["npm:/", "node_modules/", ".cache/"],
+    "lineWidth": 80,
+    "indentWidth": 2,
+    "useTabs": false,
+    "semiColons": true,
+    "singleQuote": false,
+    "proseWrap": "preserve"
   },
   "compilerOptions": {
     "jsx": "precompile",
