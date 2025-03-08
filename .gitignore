@@ -24,8 +24,6 @@ frontend/node_modules/
 # =====================================
 .docker/
 docker-compose.override.yml
-docker-compose.ci.yml
-docker-compose.e2e.yml
 
 # =====================================
 # データベース関連

@@ -130,19 +130,40 @@ jobs:
           lint_errors=false
 
           if [ -f backend-lint.json ] && [ -s backend-lint.json ]; then
-            echo "::warning::バックエンドのリントエラーが検出されました"
-            echo "リントエラー詳細:"
-            cat backend-lint.json | jq -r '.[] | "::error file=\(.file),line=\(.range.start.line),col=\(.range.start.col)::\(.message)"' || true
-            lint_errors=true
+            # バックエンド: 新しいDenoリント形式と古い形式の両方に対応
+            if [ "$(cat backend-lint.json | jq 'has("diagnostics")')" == "true" ]; then
+              # 新しい形式 (オブジェクト + diagnostics配列)
+              if [ "$(cat backend-lint.json | jq '.diagnostics | length > 0 or .errors | length > 0')" == "true" ]; then
+                echo "::warning::バックエンドのリントエラーが検出されました"
+                echo "リントエラー詳細:"
+                cat backend-lint.json | jq -r '.diagnostics[] | "::error file=\(.file_path // "unknown"),line=\(.range.start.line // 0),col=\(.range.start.character // 0)::\(.message)"' || true
+                cat backend-lint.json | jq -r '.errors[] | "::error::\(.)"' || true
+                lint_errors=true
+              else
+                echo "::notice::バックエンドのリントエラーはありません"
+              fi
+            else
+              # 古い形式 (配列)
+              echo "::warning::バックエンドのリントエラーが検出されました"
+              echo "リントエラー詳細:"
+              cat backend-lint.json | jq -r '.[] | "::error file=\(.file),line=\(.range.start.line),col=\(.range.start.col)::\(.message)"' || true
+              lint_errors=true
+            fi
           else
             echo "::notice::バックエンドのリントエラーはありません"
           fi
 
           if [ -f frontend-lint.json ] && [ -s frontend-lint.json ]; then
-            echo "::warning::フロントエンドのリントエラーが検出されました"
-            echo "リントエラー詳細:"
-            cat frontend-lint.json | jq -r 'if type == "array" then .[] else . end | if has("message") then "::error file=\(.file // "unknown"),line=\(.range.start.line // 0),col=\(.range.start.col // 0)::\(.message)" else empty end' || true
-            lint_errors=true
+            # フロントエンド: 新しいDenoリント形式を使用
+            if [ "$(cat frontend-lint.json | jq '.diagnostics | length > 0 or .errors | length > 0')" == "true" ]; then
+              echo "::warning::フロントエンドのリントエラーが検出されました"
+              echo "リントエラー詳細:"
+              cat frontend-lint.json | jq -r '.diagnostics[] | "::error file=\(.file_path // "unknown"),line=\(.range.start.line // 0),col=\(.range.start.character // 0)::\(.message)"' || true
+              cat frontend-lint.json | jq -r '.errors[] | "::error::\(.)"' || true
+              lint_errors=true
+            else
+              echo "::notice::フロントエンドのリントエラーはありません"
+            fi
           else
             echo "::notice::フロントエンドのリントエラーはありません"
           fi
@@ -160,193 +181,27 @@ jobs:
           retention-days: 7
 
   create-compose-configs:
-    name: Docker Compose設定生成
+    name: Docker Compose設定確認
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    outputs:
-      compose-ci-file: docker-compose.ci.yml
-      compose-e2e-file: docker-compose.e2e.yml
     steps:
-      - name: 共通設定ファイル作成
-        id: create-base-config
+      - name: チェックアウト
+        uses: actions/checkout@v4
+
+      - name: 設定ファイルの存在確認
         run: |
-          cat > docker-compose.base.yml << EOF
-          version: '3.8'
+          # docker-compose.ci.ymlとdocker-compose.e2e.ymlの存在確認
+          if [ ! -f "docker-compose.ci.yml" ]; then
+            echo "::error::docker-compose.ci.ymlが見つかりません"
+            exit 1
+          fi
 
-          services:
-            db:
-              build:
-                context: ./docker
-                dockerfile: db.Dockerfile
-              environment:
-                - POSTGRES_USER=${{ env.TEST_DB_USER }}
-                - POSTGRES_PASSWORD=${{ env.TEST_DB_PASSWORD }}
-                - POSTGRES_DB=${{ env.TEST_DB_NAME }}
-              tmpfs:
-                - /var/lib/postgresql/data
-              healthcheck:
-                test: ["CMD-SHELL", "pg_isready -U ${{ env.TEST_DB_USER }}"]
-                interval: 5s
-                timeout: 5s
-                retries: 5
-                start_period: 5s
-                
-          volumes:
-            backend-deno-cache:
-            frontend-deno-cache:
-          EOF
+          if [ ! -f "docker-compose.e2e.yml" ]; then
+            echo "::error::docker-compose.e2e.ymlが見つかりません"
+            exit 1
+          fi
 
-          echo "::notice::共通Docker Compose設定ファイルを作成しました"
-
-      - name: テスト用Docker Compose設定ファイル作成
-        run: |
-          cat > docker-compose.ci.yml << EOF
-          version: '3.8'
-
-          services:
-            backend:
-              build:
-                context: .
-                dockerfile: docker/backend.Dockerfile
-                target: dev
-              environment:
-                - ENV=test
-                - PORT=${{ env.TEST_BACKEND_PORT }}
-                - DB_HOST=db
-                - DB_PORT=5432
-                - DB_USER=${{ env.TEST_DB_USER }}
-                - DB_PASSWORD=${{ env.TEST_DB_PASSWORD }}
-                - DB_NAME=${{ env.TEST_DB_NAME }}
-              volumes:
-                - ./backend:/app
-                - ./shared:/app/shared
-                - backend-deno-cache:/app/.cache
-              depends_on:
-                db:
-                  condition: service_healthy
-              healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:${{ env.TEST_BACKEND_PORT }}/health"]
-                interval: 5s
-                timeout: 5s
-                retries: 3
-                start_period: 5s
-            
-            frontend:
-              build:
-                context: .
-                dockerfile: docker/frontend.Dockerfile
-                target: dev
-              environment:
-                - ENV=test
-                - VITE_API_URL=http://backend:${{ env.TEST_BACKEND_PORT }}
-              volumes:
-                - ./frontend:/app
-                - ./shared:/app/shared
-                - frontend-deno-cache:/app/.cache
-              depends_on:
-                backend:
-                  condition: service_healthy
-            
-            db:
-              extends:
-                file: docker-compose.base.yml
-                service: db
-
-          volumes:
-            backend-deno-cache:
-            frontend-deno-cache:
-          EOF
-
-          echo "::notice::テスト用Docker Compose設定ファイルを作成しました"
-
-      - name: E2Eテスト用Docker Compose設定ファイル作成
-        run: |
-          cat > docker-compose.e2e.yml << EOF
-          version: '3.8'
-
-          services:
-            backend:
-              build:
-                context: .
-                dockerfile: docker/backend.Dockerfile
-                target: dev
-              environment:
-                - ENV=test
-                - PORT=${{ env.TEST_BACKEND_PORT }}
-                - DB_HOST=db
-                - DB_USER=${{ env.TEST_DB_USER }}
-                - DB_PASSWORD=${{ env.TEST_DB_PASSWORD }}
-                - DB_NAME=${{ env.TEST_DB_NAME }}
-              volumes:
-                - ./backend:/app
-                - ./shared:/app/shared
-                - backend-deno-cache:/app/.cache
-              depends_on:
-                db:
-                  condition: service_healthy
-              healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:${{ env.TEST_BACKEND_PORT }}/health"]
-                interval: 5s
-                timeout: 5s
-                retries: 3
-                start_period: 5s
-                
-            frontend:
-              build:
-                context: .
-                dockerfile: docker/frontend.Dockerfile
-                target: dev
-              environment:
-                - ENV=test
-                - VITE_API_URL=http://backend:${{ env.TEST_BACKEND_PORT }}
-              ports:
-                - "${{ env.TEST_FRONTEND_PORT }}:${{ env.TEST_FRONTEND_PORT }}"
-              volumes:
-                - ./frontend:/app
-                - ./shared:/app/shared
-                - frontend-deno-cache:/app/.cache
-              depends_on:
-                backend:
-                  condition: service_healthy
-                  
-            e2e:
-              build:
-                context: .
-                dockerfile: docker/frontend.Dockerfile
-                target: dev
-              volumes:
-                - ./frontend:/app
-                - ./shared:/app/shared
-                - ./frontend/playwright-report:/app/playwright-report
-                - ./frontend/test-results:/app/test-results
-              environment:
-                - PLAYWRIGHT_BASE_URL=http://frontend:${{ env.TEST_FRONTEND_PORT }}
-              depends_on:
-                frontend:
-                  condition: service_started
-              command: ["task", "test:e2e"]
-            
-            db:
-              extends:
-                file: docker-compose.base.yml
-                service: db
-                
-          volumes:
-            backend-deno-cache:
-            frontend-deno-cache:
-          EOF
-
-          echo "::notice::E2Eテスト用Docker Compose設定ファイルを作成しました"
-
-      - name: Compose設定ファイルのアップロード
-        uses: actions/upload-artifact@v4
-        with:
-          name: compose-configs
-          path: |
-            docker-compose.base.yml
-            docker-compose.ci.yml
-            docker-compose.e2e.yml
-          retention-days: 1
+          echo "::notice::Docker Compose設定ファイルの確認が完了しました"
 
   unit-tests:
     name: ユニットテスト
@@ -370,11 +225,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: Compose設定ファイルのダウンロード
-        uses: actions/download-artifact@v4
-        with:
-          name: compose-configs
-
       - name: Docker Compose テスト環境構築
         run: docker-compose -f docker-compose.ci.yml build
 
@@ -383,6 +233,25 @@ jobs:
 
       - name: バックエンド起動
         run: docker-compose -f docker-compose.ci.yml up -d backend
+
+      - name: バックエンドの正常起動を待機
+        run: |
+          echo "バックエンドサービスの起動を待機中..."
+          attempt=0
+          max_attempts=10
+          until docker-compose -f docker-compose.ci.yml ps backend | grep "(healthy)" || [ $attempt -eq $max_attempts ]
+          do
+            echo "バックエンド起動待機中... 試行 $((++attempt))/$max_attempts"
+            sleep 5
+          done
+
+          if [ $attempt -eq $max_attempts ]; then
+            echo "::error::バックエンドサービスの起動タイムアウト"
+            docker-compose -f docker-compose.ci.yml logs backend
+            exit 1
+          fi
+
+          echo "バックエンドサービスが正常に起動しました"
 
       - name: バックエンド単体テスト実行
         run: docker-compose -f docker-compose.ci.yml exec -T backend deno task test:unit
@@ -441,11 +310,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: Compose設定ファイルのダウンロード
-        uses: actions/download-artifact@v4
-        with:
-          name: compose-configs
-
       - name: Docker Compose E2E環境構築
         run: docker-compose -f docker-compose.e2e.yml build
 
@@ -459,7 +323,33 @@ jobs:
 
           # サービスが起動するまで待機
           echo "サービスの起動を待機中..."
-          sleep 20
+          attempt=0
+          max_attempts=12
+          until docker-compose -f docker-compose.e2e.yml ps backend | grep "(healthy)" && docker-compose -f docker-compose.e2e.yml ps frontend | grep "(healthy)" || [ $attempt -eq $max_attempts ]
+          do
+            echo "サービス起動待機中... 試行 $((++attempt))/$max_attempts"
+            sleep 10
+            
+            # 問題発生時のデバッグ情報
+            if [ $attempt -eq 6 ]; then
+              echo "::group::サービス状態"
+              docker-compose -f docker-compose.e2e.yml ps
+              echo "::endgroup::"
+              
+              echo "::group::バックエンドログ"
+              docker-compose -f docker-compose.e2e.yml logs backend
+              echo "::endgroup::"
+            fi
+          done
+
+          if [ $attempt -eq $max_attempts ]; then
+            echo "::error::サービス起動のタイムアウト"
+            docker-compose -f docker-compose.e2e.yml ps
+            docker-compose -f docker-compose.e2e.yml logs
+            exit 1
+          fi
+
+          echo "すべてのサービスが正常に起動しました"
 
           # E2Eテスト実行
           docker-compose -f docker-compose.e2e.yml run --rm e2e deno task test:e2e

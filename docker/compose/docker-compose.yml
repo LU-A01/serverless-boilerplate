@@ -1,0 +1,141 @@
+services:
+  # バックエンドサービス
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      target: dev
+    container_name: app-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    environment:
+      - DENO_ENV=development
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-app_db}
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-key}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/main.ts:/app/main.ts
+      - ./shared:/app/shared
+      - backend-deno-cache:/app/.cache/deno
+    networks:
+      - app-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "deno",
+          "eval",
+          "await fetch('http://localhost:3000/health').then(r => r.ok ? Deno.exit(0) : Deno.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # フロントエンドサービス
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      target: dev
+    container_name: app-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    environment:
+      - DENO_ENV=development
+      - DENO_NODE_COMPAT=1
+      - PUBLIC_API_URL=http://localhost:${BACKEND_PORT:-3000}
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/static:/app/static
+      - ./frontend/package.json:/app/package.json
+      - ./frontend/svelte.config.js:/app/svelte.config.js
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/node_modules:/app/node_modules
+      - ./shared:/app/shared
+      - frontend-deno-cache:/app/.cache/deno
+    networks:
+      - app-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "deno",
+          "eval",
+          "await fetch('http://localhost:5173').then(r => r.ok ? Deno.exit(0) : Deno.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # データベースサービス
+  db:
+    build:
+      context: ./docker
+      dockerfile: db.Dockerfile
+    container_name: app-db
+    restart: unless-stopped
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+      - POSTGRES_DB=${DB_NAME:-app_db}
+      - TZ=Asia/Tokyo
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${DB_NAME:-app_db}"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # 開発ツール: データベース管理UI (オプション)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: app-pgadmin
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@example.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    networks:
+      - app-network
+
+volumes:
+  pg-data:
+    name: app-pg-data
+  pgadmin-data:
+    name: app-pgadmin-data
+  backend-deno-cache:
+    name: app-backend-deno-cache
+  frontend-deno-cache:
+    name: app-frontend-deno-cache
+
+networks:
+  app-network:
+    name: app-network
+    driver: bridge
