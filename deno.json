@@ -3,6 +3,7 @@
     "dev": "deno run -A --watch main.ts",
     "build": "deno run -A build.ts",
     "test": "deno test -A",
+    "coverage": "deno test -A --coverage=coverage --include=backend/src/,frontend/src/,shared/ && deno coverage coverage --include=backend/src/,frontend/src/,shared/ --exclude=tests/,node_modules/,.svelte-kit/,.cache/,build/",
     "lint": "deno lint --ignore=node_modules/,npm:/,/app/.cache/",
     "fmt": "deno fmt --ignore=node_modules/,npm:/,/app/.cache/"
   },
@@ -32,5 +33,5 @@
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "dom.asynciterable", "deno.ns"]
   },
-  "nodeModulesDir": true
+  "nodeModulesDir": "auto"
 } 

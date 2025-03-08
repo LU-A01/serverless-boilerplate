@@ -6,6 +6,7 @@
     "test": "deno test -A",
     "test:unit": "deno run -A --node-modules-dir npm:vitest run",
     "test:e2e": "deno run -A --node-modules-dir npm:playwright test",
+    "coverage": "deno test -A --coverage=coverage --include=src/ && deno coverage coverage --include=src/ --exclude=tests/,node_modules/,.svelte-kit/,.cache/,build/",
     "check": "deno run -A --node-modules-dir npm:svelte-kit sync && deno run -A --node-modules-dir npm:svelte-check --tsconfig ./tsconfig.json",
     "format": "deno fmt"
   },
