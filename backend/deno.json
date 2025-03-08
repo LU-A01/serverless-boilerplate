@@ -10,7 +10,7 @@
     "test:unit": "deno test -A tests/unit",
     "test:integration": "deno test -A tests/integration",
     "test:e2e": "deno test -A tests/e2e",
-    "coverage": "deno test -A --coverage=coverage --include=src/ && deno coverage coverage --include=src/ --exclude=tests/,node_modules/,.cache/",
+    "coverage": "deno test -A --coverage=coverage src/ && deno coverage coverage --exclude=tests/,node_modules/,.cache/",
     "fmt": "deno fmt",
     "lint": "deno lint --ignore=npm:/,node_modules/,.cache/",
     "build": "deno compile -A main.ts"

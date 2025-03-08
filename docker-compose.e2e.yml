@@ -79,10 +79,15 @@ services:
       - ./frontend/test-results:/app/test-results
     environment:
       - PLAYWRIGHT_BASE_URL=http://frontend:${TEST_FRONTEND_PORT:-5173}
+      - PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+      - CHROME_PATH=/usr/bin/chromium-browser
+      - FRONTEND_URL=http://frontend:${TEST_FRONTEND_PORT:-5173}
+      - API_URL=http://backend:${TEST_BACKEND_PORT:-3000}
     depends_on:
       frontend:
         condition: service_started
-    command: ["task", "test:e2e"]
+    # E2E実行時のコマンドはCIスクリプトから渡すのでコメントアウト
+    # command: ["task", "test:e2e"]
     networks:
       - app-test-network
 

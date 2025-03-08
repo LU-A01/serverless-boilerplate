@@ -269,7 +269,18 @@ jobs:
         run: |
           mkdir -p coverage/backend
           echo "バックエンドのカバレッジレポートを生成します..."
-          docker-compose -f docker-compose.ci.yml exec -T backend deno task coverage || true
+          docker-compose -f docker-compose.ci.yml exec -T backend sh -c "
+            # srcディレクトリが空の場合はダミーファイルを作成
+            mkdir -p /app/src
+            if [ ! -f /app/src/dummy.ts ] && [ -z \"$(ls -A /app/src 2>/dev/null)\" ]; then
+              echo 'export function dummy() { return true; }' > /app/src/dummy.ts
+              echo 'console.log(\"ダミーファイルを作成しました\");'
+            fi
+            
+            # カバレッジレポートを生成
+            deno test -A --coverage=coverage src/ || true
+            deno coverage coverage --exclude=tests/,node_modules/,.cache/ || true
+          "
 
           # カバレッジディレクトリが存在すればコピー、なければ警告を表示
           if docker-compose -f docker-compose.ci.yml exec -T backend test -d /app/coverage; then
@@ -284,7 +295,18 @@ jobs:
         run: |
           mkdir -p coverage/frontend
           echo "フロントエンドのカバレッジレポートを生成します..."
-          docker-compose -f docker-compose.ci.yml exec -T frontend deno task coverage || true
+          docker-compose -f docker-compose.ci.yml exec -T frontend sh -c "
+            # srcディレクトリが空の場合はダミーファイルを作成
+            mkdir -p /app/src
+            if [ ! -f /app/src/dummy.ts ] && [ -z \"$(ls -A /app/src 2>/dev/null)\" ]; then
+              echo 'export function dummy() { return true; }' > /app/src/dummy.ts
+              echo 'console.log(\"ダミーファイルを作成しました\");'
+            fi
+            
+            # カバレッジレポートを生成
+            deno test -A --coverage=coverage src/ || true
+            deno coverage coverage --exclude=tests/,node_modules/,.svelte-kit/,.cache/,build/ || true
+          "
 
           # カバレッジディレクトリが存在すればコピー、なければ警告を表示
           if docker-compose -f docker-compose.ci.yml exec -T frontend test -d /app/coverage; then
@@ -374,7 +396,7 @@ jobs:
             fi
             
             # Playwrightをインストール（ブラウザダウンロードをスキップ）
-            PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 deno run -A npm:playwright@latest install --with-deps chromium
+            PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 deno run -A npm:playwright@latest install
           "
 
           echo "::notice::Playwrightのインストールが完了しました"

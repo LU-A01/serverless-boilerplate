@@ -1,39 +1,48 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig } from '@playwright/test';
 
-// 環境変数用のヘルパー関数
-const isCI = !!Deno.env.get('CI');
-const baseURL = Deno.env.get('PLAYWRIGHT_BASE_URL') || 'http://localhost:5173';
-const chromePath = Deno.env.get('CHROME_PATH');
+// 環境変数からブラウザパスを取得
+const chromePath = process.env.CHROME_PATH || '';
 
+// Alpine Linuxで動作するようにカスタマイズされた設定
 export default defineConfig({
-	webServer: {
-		command: 'npm run build && npm run preview',
-		port: 4173,
-		reuseExistingServer: true,
-	},
-
-	testDir: 'e2e',
+	// テストファイルのパターン
+	testDir: './tests/e2e',
+	testMatch: '**/*.e2e.test.ts',
+	
+	// テスト実行時の設定
 	fullyParallel: true,
-	forbidOnly: isCI,
-	retries: isCI ? 2 : 0,
-	workers: isCI ? 1 : undefined,
+	forbidOnly: !!process.env.CI,
+	retries: process.env.CI ? 2 : 0,
+	workers: process.env.CI ? 1 : undefined,
 	reporter: [['html', { open: 'never' }]],
+	
+	// テスト実行のタイムアウト設定
+	timeout: 30000,
+	
+	// 各テストの独立性を保証
 	use: {
-		baseURL: baseURL,
+		// ベースURL
+		baseURL: process.env.FRONTEND_URL || 'http://localhost:5173',
+		
+		// テスト実行のトレース保存
 		trace: 'on-first-retry',
+		
+		// スクリーンショットを取得
 		screenshot: 'only-on-failure',
-		video: 'on-first-retry'
 	},
+	
+	// プロジェクト別設定（ブラウザごと）
 	projects: [
 		{
 			name: 'chromium',
-			use: { 
-				...devices['Desktop Chrome'],
-				// Alpine Linuxでのシステムブラウザの使用を考慮
-				launchOptions: chromePath ? {
-					executablePath: chromePath
-				} : undefined
+			use: {
+				// Alpine Linuxの場合はシステムのChromiumを使用
+				...(chromePath && {
+					launchOptions: {
+						executablePath: chromePath,
+					},
+				}),
 			},
-		}
+		},
 	],
 });

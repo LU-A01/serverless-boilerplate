@@ -30,5 +30,23 @@ COPY frontend/vite.config.ts .
 COPY frontend/src/ ./src/
 COPY frontend/static/ ./static/
 COPY shared/ ./shared/
+
+# E2Eテスト用の依存関係追加
+RUN apk add --no-cache \
+    chromium \
+    firefox \
+    font-noto-cjk \
+    font-noto-emoji \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    dbus-x11 \
+    mesa-dri-gallium
+
+# テスト用環境変数の設定
+ENV CHROME_PATH=/usr/bin/chromium-browser
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
 EXPOSE 5173
 CMD ["run", "-A", "--node-modules-dir", "npm:vite", "dev", "--host", "0.0.0.0"]
