@@ -286,7 +286,24 @@ jobs:
 
       - name: 環境停止
         if: always()
-        run: docker-compose -f docker-compose.ci.yml down -v
+        run: |
+          # 設定ファイルの存在を確認してから停止処理を行う
+          if [ -f "docker-compose.ci.yml" ]; then
+            echo "docker-compose.ci.ymlを使用して環境を停止します"
+            docker-compose -f docker-compose.ci.yml down -v || true
+          else
+            echo "::warning::docker-compose.ci.ymlファイルが見つかりません。環境のクリーンアップをスキップします。"
+            # コンテナを直接停止する
+            containers=$(docker ps -q --filter "name=serverless")
+            if [ -n "$containers" ]; then
+              echo "関連するコンテナを直接停止します"
+              docker stop $containers || true
+              docker rm $containers || true
+            fi
+          fi
+
+          # 念のため未使用のボリュームを削除
+          docker volume prune -f
 
   e2e-test:
     name: E2Eテスト
@@ -366,7 +383,24 @@ jobs:
 
       - name: 環境停止
         if: always()
-        run: docker-compose -f docker-compose.e2e.yml down -v
+        run: |
+          # 設定ファイルの存在を確認してから停止処理を行う
+          if [ -f "docker-compose.e2e.yml" ]; then
+            echo "docker-compose.e2e.ymlを使用して環境を停止します"
+            docker-compose -f docker-compose.e2e.yml down -v || true
+          else
+            echo "::warning::docker-compose.e2e.ymlファイルが見つかりません。環境のクリーンアップをスキップします。"
+            # コンテナを直接停止する
+            containers=$(docker ps -q --filter "name=serverless")
+            if [ -n "$containers" ]; then
+              echo "関連するコンテナを直接停止します"
+              docker stop $containers || true
+              docker rm $containers || true
+            fi
+          fi
+
+          # 念のため未使用のボリュームを削除
+          docker volume prune -f
 
   build:
     name: 本番用ビルド

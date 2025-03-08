@@ -1,1 +1,94 @@
- 
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      target: dev
+    environment:
+      - ENV=test
+      - PORT=${TEST_BACKEND_PORT:-3000}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${TEST_DB_USER:-test_user}
+      - DB_PASSWORD=${TEST_DB_PASSWORD:-test_password}
+      - DB_NAME=${TEST_DB_NAME:-test_db}
+    volumes:
+      - ./backend:/app
+      - ./shared:/app/shared
+      - backend-deno-cache:/app/.cache
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "deno",
+          "eval",
+          "await fetch('http://localhost:${TEST_BACKEND_PORT:-3000}/health').then(r => r.ok ? Deno.exit(0) : Deno.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - app-test-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      target: dev
+    environment:
+      - ENV=test
+      - VITE_API_URL=http://backend:${TEST_BACKEND_PORT:-3000}
+    volumes:
+      - ./frontend:/app
+      - ./shared:/app/shared
+      - frontend-deno-cache:/app/.cache
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "deno",
+          "eval",
+          "await fetch('http://localhost:${TEST_FRONTEND_PORT:-5173}').then(r => r.ok ? Deno.exit(0) : Deno.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - app-test-network
+
+  db:
+    build:
+      context: ./docker
+      dockerfile: db.Dockerfile
+    environment:
+      - POSTGRES_USER=${TEST_DB_USER:-test_user}
+      - POSTGRES_PASSWORD=${TEST_DB_PASSWORD:-test_password}
+      - POSTGRES_DB=${TEST_DB_NAME:-test_db}
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TEST_DB_USER:-test_user}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - app-test-network
+
+networks:
+  app-test-network:
+    driver: bridge
+
+volumes:
+  backend-deno-cache:
+  frontend-deno-cache:
