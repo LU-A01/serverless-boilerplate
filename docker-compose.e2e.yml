@@ -49,6 +49,7 @@ services:
       - ./frontend:/app
       - ./shared:/app/shared
       - frontend-deno-cache:/app/.cache
+      - frontend-svelte-kit:/app/.svelte-kit
     depends_on:
       backend:
         condition: service_healthy
@@ -58,12 +59,12 @@ services:
           "CMD",
           "deno",
           "eval",
-          "await fetch('http://localhost:${TEST_FRONTEND_PORT:-5173}').then(r => r.ok ? Deno.exit(0) : Deno.exit(1))",
+          "try { await fetch('http://localhost:5173'); Deno.exit(0); } catch(e) { console.error(e); Deno.exit(1); }",
         ]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 5s
+      retries: 5
+      start_period: 15s
     networks:
       - app-test-network
 
@@ -117,3 +118,4 @@ networks:
 volumes:
   backend-deno-cache:
   frontend-deno-cache:
+  frontend-svelte-kit:

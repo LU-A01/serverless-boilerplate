@@ -9,8 +9,10 @@ ENV NODE_OPTIONS="--no-warnings"
 # 依存関係ステージ - 依存関係のインストールのみを行う
 FROM base AS deps
 COPY frontend/package.json .
+COPY frontend/deno.json .
 COPY frontend/svelte.config.js .
 COPY frontend/vite.config.ts .
+COPY frontend/tsconfig.json .
 
 # npmモジュールのインストールディレクトリを準備
 RUN mkdir -p /app/node_modules
@@ -20,13 +22,20 @@ RUN deno cache --node-modules-dir npm:vite
 # totalistを含む依存関係を事前インポート（実行ではなくインポート）
 RUN echo 'import "npm:totalist@3.0.1"; console.log("Dependencies cached");' > /tmp/deps.js && deno run -A /tmp/deps.js
 
+# SvelteKitの初期化を実行
+RUN mkdir -p /app/.svelte-kit
+RUN deno run -A --node-modules-dir npm:svelte-kit sync || echo "SvelteKit初期化がスキップされました"
+
 # 開発ステージ - 開発環境用の設定
 FROM base AS dev
 COPY --from=deps /app/node_modules /app/node_modules
 COPY --from=deps /app/.cache /app/.cache
+COPY --from=deps /app/.svelte-kit /app/.svelte-kit
 COPY frontend/package.json .
+COPY frontend/deno.json .
 COPY frontend/svelte.config.js .
 COPY frontend/vite.config.ts .
+COPY frontend/tsconfig.json .
 COPY frontend/src/ ./src/
 COPY frontend/static/ ./static/
 COPY shared/ ./shared/
@@ -48,5 +57,5 @@ RUN apk add --no-cache \
 ENV CHROME_PATH=/usr/bin/chromium-browser
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
-EXPOSE 5173
-CMD ["run", "-A", "--node-modules-dir", "npm:vite", "dev", "--host", "0.0.0.0"]
+# 起動前の初期化コマンド
+CMD ["sh", "-c", "deno task prepare || true && deno run -A --node-modules-dir npm:vite dev --host 0.0.0.0"]

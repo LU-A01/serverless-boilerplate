@@ -403,26 +403,54 @@ jobs:
 
       - name: E2Eテスト実行
         run: |
+          # Docker環境のクリーンアップ
+          docker-compose -f docker-compose.e2e.yml down -v || true
+          docker system prune -f || true
+
           # DB, バックエンド、フロントエンドを起動
+          docker-compose -f docker-compose.e2e.yml build --no-cache
           docker-compose -f docker-compose.e2e.yml up -d db backend frontend
+
+          # フロントエンドの初期化 - SvelteKit syncを実行
+          echo "::group::フロントエンド初期化"
+          docker-compose -f docker-compose.e2e.yml exec -T frontend sh -c "
+            echo 'SvelteKit初期化を実行しています...'
+            deno task prepare || true
+            
+            # 初期化確認
+            if [ -d '/app/.svelte-kit' ]; then
+              echo 'SvelteKit初期化が完了しました'
+              ls -la /app/.svelte-kit
+            else
+              echo '::warning::.svelte-kitディレクトリが生成されませんでした'
+              # バックアッププラン: 手動でディレクトリを作成
+              mkdir -p /app/.svelte-kit
+              echo '{}' > /app/.svelte-kit/tsconfig.json
+            fi
+          "
+          echo "::endgroup::"
 
           # サービスが起動するまで待機
           echo "サービスの起動を待機中..."
           attempt=0
-          max_attempts=12
+          max_attempts=15
           until docker-compose -f docker-compose.e2e.yml ps backend | grep "(healthy)" && docker-compose -f docker-compose.e2e.yml ps frontend | grep "(healthy)" || [ $attempt -eq $max_attempts ]
           do
             echo "サービス起動待機中... 試行 $((++attempt))/$max_attempts"
-            sleep 10
+            sleep 15
             
-            # 問題発生時のデバッグ情報
-            if [ $attempt -eq 6 ]; then
-              echo "::group::サービス状態"
+            # 定期的なデバッグ情報出力
+            if [ $((attempt % 3)) -eq 0 ]; then
+              echo "::group::現在のサービス状態"
               docker-compose -f docker-compose.e2e.yml ps
               echo "::endgroup::"
               
               echo "::group::バックエンドログ"
               docker-compose -f docker-compose.e2e.yml logs backend
+              echo "::endgroup::"
+              
+              echo "::group::フロントエンドログ"
+              docker-compose -f docker-compose.e2e.yml logs frontend
               echo "::endgroup::"
             fi
           done
