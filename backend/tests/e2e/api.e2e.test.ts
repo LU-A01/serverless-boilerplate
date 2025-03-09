@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std/assert/mod.ts";
+import { assertEquals } from "https://deno.land/std@0.217.0/assert/mod.ts";
 
 // APIのE2Eテスト
 Deno.test("API: ヘルスチェックエンドポイントが正常に応答する", async () => {
